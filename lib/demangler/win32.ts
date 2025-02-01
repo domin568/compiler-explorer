@@ -36,6 +36,7 @@ export class Win32Demangler extends CppDemangler {
         return 'win32';
     }
 
+    isMsvc6: boolean;
     flags: string;
     allDecoratedLabels: RegExp;
     allDecoratedLabelsWithQuotes: RegExp;
@@ -50,7 +51,11 @@ export class Win32Demangler extends CppDemangler {
         //   - 0x00080 : Disable expansion of access specifiers for members
         //   - 0x08000 : Disable enum/class/struct/union prefix
         //   - 0x20000 : Disable expansion of __ptr64 keyword
+        this.isMsvc6 = compiler.compiler.id === 'msvc6';
         this.flags = '0x28090';
+        if (this.isMsvc6) {
+            this.flags = '-f';
+        }
         this.allDecoratedLabels = /\?[$?@A-Z_a-z][\w$<>?@]*/g;
         this.allDecoratedLabelsWithQuotes = /"\?[$?@A-Z_a-z][\w$<>?@]*"/;
 
@@ -115,20 +120,33 @@ export class Win32Demangler extends CppDemangler {
             const outputArray = utils.splitLines(output.stdout);
 
             for (let i = 0; i < outputArray.length; ++i) {
-                let tmp = outputArray[i].match(/^Undecoration of :- "(.*)"/);
+                const msvc6Pattern = /^>> (.*) == (.*)/;
+                const msvcPattern1 = /^Undecoration of :- "(.*)"/;
+                const pattern1 = this.isMsvc6 ? msvc6Pattern : msvcPattern1;
+                let tmp = outputArray[i].match(pattern1);
                 if (tmp) {
                     const decoratedName = tmp[1];
-                    ++i;
-                    tmp = outputArray[i].match(/^is :- "(.*)"/);
-                    if (tmp) {
+                    if (this.isMsvc6) {
                         if (this.hasQuotesAroundDecoratedLabels) {
-                            translations[`"${decoratedName}"`] = tmp[1];
+                            translations[`"${decoratedName}"`] = tmp[2];
                         } else {
-                            translations[decoratedName] = tmp[1];
+                            translations[decoratedName] = tmp[2];
                         }
                     } else {
-                        logger.error(`Broken undname: ${outputArray[i - 1]}, ${outputArray[i]}`);
+                        ++i;
+                        tmp = outputArray[i].match(/^is :- "(.*)"/);
+                        if (tmp) {
+                            if (this.hasQuotesAroundDecoratedLabels) {
+                                translations[`"${decoratedName}"`] = tmp[1];
+                            } else {
+                                translations[decoratedName] = tmp[1];
+                            }
+                        } else {
+                            logger.error(`Broken undname: ${outputArray[i - 1]}, ${outputArray[i]}`);
+                        }
                     }
+                } else if (this.isMsvc6) {
+                    logger.error(`Broken undname: ${outputArray[i - 1]}, ${outputArray[i]}`);
                 }
             }
         };

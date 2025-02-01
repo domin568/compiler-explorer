@@ -56,9 +56,10 @@ export class VcAsmParser extends AsmParser {
     protected beginSegment =
         /^(CONST|_BSS|\.?[prx]?data(\$[A-Za-z]+)?|CRT(\$[A-Za-z]+)?|_TEXT|\.?text(\$[A-Za-z]+)?)\s+SEGMENT|\s*AREA/;
     protected endSegment = /^(CONST|_BSS|[prx]?data(\$[A-Za-z]+)?|CRT(\$[A-Za-z]+)?|_TEXT|text(\$[A-Za-z]+)?)\s+ENDS/;
-    private readonly beginFunction = /^; Function compile flags: /;
+    protected beginFunction = /^; Function compile flags: /;
     private readonly endProc = /^([$?@A-Z_a-z][\w$<>?@]*)?\s+ENDP/;
     private readonly labelFind = /[$?@A-Z_a-z][\w$<>?@]*/g;
+    protected isMsvc6 = false;
 
     constructor(compilerProps?: PropertyGetter) {
         super(compilerProps);
@@ -192,6 +193,15 @@ export class VcAsmParser extends AsmParser {
             }
         };
 
+        if (this.isMsvc6) {
+            currentFunction = {
+                lines: [],
+                initialLine: undefined,
+                name: undefined,
+                file: undefined,
+            };
+        }
+
         for (let line of asmLines) {
             if (line.trim() === 'END') {
                 seenEnd = true;
@@ -234,18 +244,29 @@ export class VcAsmParser extends AsmParser {
                     logger.error('We have a file comment outside of a function: %s', line);
                 }
                 // if the file is the "main file", give it the file `null`
-                if (stdInLooking.test(fileName)) {
-                    currentFile = null;
+                if (this.isMsvc6 === false) {
+                    if (stdInLooking.test(fileName)) {
+                        currentFile = null;
+                    } else {
+                        currentFile = fileName;
+                    }
                 } else {
                     currentFile = fileName;
                 }
+
                 assert(currentFunction);
-                if (currentFunction.file === undefined) {
+                if (this.isMsvc6 === false) {
+                    if (currentFunction.file === undefined) {
+                        currentFunction.file = currentFile;
+                    }
+                } else {
                     currentFunction.file = currentFile;
                 }
             }
 
-            currentFunction = checkBeginFunction(line);
+            if (!this.isMsvc6) {
+                currentFunction = checkBeginFunction(line);
+            }
 
             const functionName = line.match(this.definesFunction);
             if (functionName) {
@@ -284,6 +305,18 @@ export class VcAsmParser extends AsmParser {
             }
 
             checkUsedDatadefLabels(line);
+
+            if (this.isMsvc6 && this.endProc.test(line)) {
+                assert(currentFunction);
+                resultObject.functions.push(currentFunction);
+                currentFunction = {
+                    lines: [],
+                    initialLine: undefined,
+                    name: undefined,
+                    file: undefined,
+                };
+                currentFunction.file = currentFile;
+            }
         }
 
         return this.resultObjectIntoArray(resultObject, filters, datadefLabelsUsed);
@@ -371,7 +404,15 @@ export class VcAsmParser extends AsmParser {
         }
 
         for (const func of obj.functions) {
-            if (!filters.libraryCode || func.file === null) {
+            let include = true;
+            if (this.isMsvc6) {
+                if (filters.libraryCode && func.file?.includes('VC98\\include\\')) {
+                    include = false;
+                }
+            } else if (!filters.libraryCode || func.file === null) {
+                include = true;
+            }
+            if (include) {
                 pushLine({text: '', source: null});
                 for (const line of func.lines) {
                     pushLine(line);

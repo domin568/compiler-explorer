@@ -35,6 +35,8 @@ export class Vc6AsmParser extends VcAsmParser {
             /^(CONST|_BSS|_DATA|_TLS|\.?[prx]?data(\$[A-Za-z]+)?|CRT(\$[A-Za-z]+)?|_TEXT|\.?text(\$[A-Za-z]+)?)\s+SEGMENT|\s*AREA/;
         this.endSegment =
             /^(CONST|_BSS|_DATA|_TLS|[prx]?data(\$[A-Za-z]+)?|CRT(\$[A-Za-z]+)?|_TEXT|text(\$[A-Za-z]+)?)\s+ENDS/;
+        this.beginFunction = /^PUBLIC\t/;
+        this.isMsvc6 = true;
     }
 
     // NB processAsm previously used `definesFunction` to "checkBeginFunction". The base class uses `beginFunction`
