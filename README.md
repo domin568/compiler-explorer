@@ -6,7 +6,7 @@ Fork of CompilerExplorer that adds support for Microsoft Visual 6.0 compiler. It
 
 # Screenshoot
 
-[![screenshot](views/resources/screenshot_msvc6.png)]
+![screenshot](views/resources/screenshot_msvc6.png)
 
 # How to run it locally?
 
